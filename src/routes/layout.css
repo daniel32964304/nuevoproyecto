@@ -1,3 +1,27 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+:root {
+	--primary-bg: #f8fafc;
+	--card-bg: #ffffff;
+	--accent-blue: #2563eb;
+	--accent-cyan: #06b6d4;
+	--text-main: #1e293b;
+	--text-muted: #64748b;
+	--border-color: #e2e8f0;
+	--code-bg: #0f172a;
+	--code-text: #38bdf8;
+}
+
+body {
+	background-color: var(--primary-bg);
+	color: var(--text-main);
+	font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+	margin: 0;
+	height: 100vh;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	overflow: hidden;
+}
