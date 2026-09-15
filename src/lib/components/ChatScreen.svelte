@@ -4,13 +4,15 @@
 
 	interface Props {
 		messages: Message[];
-		onSend: (text: string) => void;
+		onSend: (text: string, image?: { name: string; dataUrl: string }) => void | Promise<void>;
 	}
 
 	let { messages, onSend }: Props = $props();
 
 	let userInput = $state('');
-	let inputEl = $state<HTMLInputElement | undefined>(undefined);
+	let selectedImage = $state<{ name: string; dataUrl: string } | undefined>(undefined);
+	let inputEl = $state<HTMLTextAreaElement | undefined>(undefined);
+	let fileInputEl = $state<HTMLInputElement | undefined>(undefined);
 	let chatWindowEl = $state<HTMLDivElement | undefined>(undefined);
 
 	$effect(() => {
@@ -24,13 +26,24 @@
 
 	function send() {
 		const text = userInput;
-		if (text.trim() === '') return;
+		if (text.trim() === '' && !selectedImage) return;
 		userInput = '';
-		onSend(text);
+		const image = selectedImage;
+		selectedImage = undefined;
+		onSend(text || 'Analiza la imagen adjunta y explícame qué observas.', image);
+	}
+
+	function selectImage(event: Event) {
+		const file = (event.currentTarget as HTMLInputElement).files?.[0];
+		if (!file || !file.type.startsWith('image/')) return;
+		const reader = new FileReader();
+		reader.onload = () => { selectedImage = { name: file.name, dataUrl: String(reader.result) }; };
+		reader.readAsDataURL(file);
 	}
 
 	function handleKeyPress(event: KeyboardEvent) {
-		if (event.key === 'Enter') {
+		if (event.key === 'Enter' && !event.shiftKey) {
+			event.preventDefault();
 			send();
 		}
 	}
@@ -38,24 +51,40 @@
 
 <div id="chat-screen">
 	<div class="chat-header">
-		Tron Assistant - Generador de Algoritmos
-		<span>Estado: En Línea</span>
+		<div class="brand-lockup">
+			<div class="brand-mark">T</div>
+			<div>
+				<strong>Tron</strong>
+				<small>Arquitectura y lógica inteligente</small>
+			</div>
+		</div>
+		<span class="online-status"><i></i> En línea</span>
 	</div>
 	<div id="chat-window" bind:this={chatWindowEl}>
-{#each messages as m}
+		<div class="conversation-column">
+			{#each messages as m}
 				<ChatMessage message={m} />
 			{/each}
+		</div>
 	</div>
 	<div class="input-area">
-		<input
-			type="text"
+		<div class="composer">
+			<input bind:this={fileInputEl} class="file-input" type="file" accept="image/*" onchange={selectImage} />
+			<button class="attach-btn" aria-label="Adjuntar imagen" title="Adjuntar imagen" onclick={() => fileInputEl?.click()}>＋</button>
+			<textarea
 			id="user-input"
 			bind:this={inputEl}
 			bind:value={userInput}
-			placeholder="Escriba su requerimiento aquí..."
+			placeholder="Escribe una pregunta o describe lo que quieres construir..."
+			rows="1"
 			onkeydown={handleKeyPress}
-		/>
-		<button class="btn-send" onclick={send}>Enviar</button>
+			></textarea>
+			<button class="btn-send" aria-label="Enviar mensaje" onclick={send}>
+				<span>Enviar</span><b>↑</b>
+			</button>
+		</div>
+		{#if selectedImage}<div class="attachment-preview">Imagen lista: {selectedImage.name} <button aria-label="Quitar imagen" onclick={() => (selectedImage = undefined)}>×</button></div>{/if}
+		<div class="composer-hint">Tron puede explicar, generar y refinar algoritmos paso a paso.</div>
 	</div>
 </div>
 
@@ -63,78 +92,125 @@
 	#chat-screen {
 		display: flex;
 		flex-direction: column;
-		width: 850px;
-		height: 85vh;
+		width: min(1120px, 100vw);
+		height: min(94vh, 920px);
 		background: var(--card-bg);
-		border-radius: 16px;
-		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+		border-radius: 12px;
+		box-shadow: 0 18px 45px rgba(11, 31, 58, 0.1);
 		border: 1px solid var(--border-color);
 		overflow: hidden;
 	}
 
 	.chat-header {
-		background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
-		color: white;
-		padding: 20px;
-		font-size: 1.1rem;
-		font-weight: 600;
+		background: #ffffff;
+		color: var(--text-main);
+		padding: 16px 26px;
+		min-height: 58px;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+		border-bottom: 1px solid var(--border-color);
 	}
 
-	.chat-header span {
-		font-size: 0.85rem;
-		opacity: 0.9;
-		background: rgba(255, 255, 255, 0.2);
-		padding: 4px 10px;
-		border-radius: 20px;
+	.brand-lockup, .brand-lockup > div:last-child {
+		display: flex;
+		align-items: center;
 	}
+
+	.brand-lockup { gap: 11px; }
+	.brand-mark {
+		width: 34px;
+		height: 34px;
+		display: grid;
+		place-items: center;
+		border-radius: 8px;
+		color: white;
+		font-weight: 800;
+		background: var(--accent-blue);
+		box-shadow: 0 5px 12px rgba(11, 31, 58, 0.18);
+	}
+
+	.brand-lockup strong { font-size: 1rem; line-height: 1.1; }
+	.brand-lockup small { display: block; color: var(--text-muted); font-size: 0.72rem; margin-top: 3px; }
+	.online-status { color: var(--accent-blue); font-size: 0.78rem; font-weight: 600; }
+	.online-status i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #2f80ed; margin-right: 6px; }
 
 	#chat-window {
 		flex: 1;
 		overflow-y: auto;
-		padding: 25px;
+		background: #ffffff;
+		padding: 34px 26px 44px;
+	}
+
+	.conversation-column {
+		width: min(780px, 100%);
+		margin: 0 auto;
 		display: flex;
 		flex-direction: column;
-		gap: 20px;
-		background: #fafafa;
+		gap: 32px;
 	}
 
 	.input-area {
-		display: flex;
-		padding: 20px;
-		background: white;
+		padding: 15px 24px 17px;
+		background: #ffffff;
 		border-top: 1px solid var(--border-color);
-		gap: 12px;
 	}
 
-	input[type='text'] {
+	.composer { width: min(780px, 100%); margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
+	.file-input { display: none; }
+	.attach-btn { width: 38px; height: 38px; border: 1px solid var(--border-color); background: #fff; color: var(--accent-blue); border-radius: 8px; cursor: pointer; font-size: 1.25rem; }
+	.attachment-preview { width: min(780px, 100%); margin: 7px auto 0; font-size: 0.75rem; color: var(--text-muted); }
+	.attachment-preview button { border: 0; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 1rem; }
+	textarea {
 		flex: 1;
-		padding: 14px 18px;
-		border: 1px solid var(--border-color);
-		border-radius: 8px;
+		resize: none;
+		min-height: 22px;
+		max-height: 130px;
+		padding: 13px 15px;
+		border: 1px solid #bcc9da;
+		border-radius: 9px;
 		outline: none;
-		font-size: 0.95rem;
-		transition: border-color 0.2s;
+		font: inherit;
+		font-size: 0.92rem;
+		line-height: 1.4;
+		color: var(--text-main);
+		background: #fff;
+		box-shadow: none;
+		transition: border-color 0.2s, box-shadow 0.2s;
 	}
 
-	input[type='text']:focus {
+	textarea:focus {
 		border-color: var(--accent-blue);
+		box-shadow: 0 0 0 3px rgba(11, 31, 58, 0.1);
 	}
 
 	.btn-send {
 		background: var(--accent-blue);
 		color: white;
 		border: none;
-		padding: 0 24px;
-		border-radius: 8px;
+		padding: 0 14px;
+		height: 47px;
+		border-radius: 9px;
 		font-weight: 600;
 		cursor: pointer;
 		transition: background 0.2s;
+		display: flex;
+		gap: 7px;
+		align-items: center;
 	}
+	.btn-send b { font-size: 1.2rem; line-height: 1; }
+	.composer-hint { width: min(780px, 100%); margin: 7px auto 0; color: #94a3b8; font-size: 0.7rem; text-align: center; }
 
 	.btn-send:hover {
-		background: #1d4ed8;
+		background: #173761;
+	}
+
+	@media (max-width: 700px) {
+		#chat-screen { height: 100vh; border-radius: 0; border: 0; }
+		.chat-header { padding: 13px 16px; }
+		#chat-window { padding: 22px 15px 34px; }
+		.input-area { padding: 12px 14px 14px; }
+		.composer-hint { display: none; }
+		.btn-send span { display: none; }
 	}
 </style>
