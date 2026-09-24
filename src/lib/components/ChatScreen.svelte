@@ -14,6 +14,8 @@
 	let inputEl = $state<HTMLTextAreaElement | undefined>(undefined);
 	let fileInputEl = $state<HTMLInputElement | undefined>(undefined);
 	let chatWindowEl = $state<HTMLDivElement | undefined>(undefined);
+	let isSending = $state(false);
+	const quickPrompts = ['Quiero crear un sistema', 'Explícame una idea', 'Revisa mi proyecto'];
 
 	$effect(() => {
 		inputEl?.focus();
@@ -24,13 +26,20 @@
 		chatWindowEl?.scrollTo({ top: chatWindowEl.scrollHeight });
 	});
 
-	function send() {
+	async function send(textOverride?: string) {
 		const text = userInput;
-		if (text.trim() === '' && !selectedImage) return;
+		const messageText = textOverride ?? text;
+		if (isSending || (messageText.trim() === '' && !selectedImage)) return;
 		userInput = '';
 		const image = selectedImage;
 		selectedImage = undefined;
-		onSend(text || 'Analiza la imagen adjunta y explícame qué observas.', image);
+		isSending = true;
+		try {
+			await onSend(messageText || 'Analiza la imagen adjunta y explícame qué observas.', image);
+		} finally {
+			isSending = false;
+			inputEl?.focus();
+		}
 	}
 
 	function selectImage(event: Event) {
@@ -58,19 +67,26 @@
 				<small>Arquitectura y lógica inteligente</small>
 			</div>
 		</div>
-		<span class="online-status"><i></i> En línea</span>
+		<span class="online-status" class:thinking={isSending} aria-live="polite"><i></i> {isSending ? 'Pensando...' : 'En línea'}</span>
 	</div>
-	<div id="chat-window" bind:this={chatWindowEl}>
+	<div id="chat-window" bind:this={chatWindowEl} aria-busy={isSending}>
 		<div class="conversation-column">
 			{#each messages as m}
 				<ChatMessage message={m} />
 			{/each}
+			{#if messages.length === 1 && !isSending}
+				<div class="quick-prompts" aria-label="Sugerencias de inicio">
+					{#each quickPrompts as prompt}
+						<button type="button" onclick={() => send(prompt)}>{prompt}</button>
+					{/each}
+				</div>
+			{/if}
 		</div>
 	</div>
 	<div class="input-area">
 		<div class="composer">
 			<input bind:this={fileInputEl} class="file-input" type="file" accept="image/*" onchange={selectImage} />
-			<button class="attach-btn" aria-label="Adjuntar imagen" title="Adjuntar imagen" onclick={() => fileInputEl?.click()}>＋</button>
+			<button class="attach-btn" aria-label="Adjuntar imagen" title="Adjuntar imagen" disabled={isSending} onclick={() => fileInputEl?.click()}>＋</button>
 			<textarea
 			id="user-input"
 			bind:this={inputEl}
@@ -79,8 +95,8 @@
 			rows="1"
 			onkeydown={handleKeyPress}
 			></textarea>
-			<button class="btn-send" aria-label="Enviar mensaje" onclick={send}>
-				<span>Enviar</span><b>↑</b>
+			<button class="btn-send" aria-label="Enviar mensaje" disabled={isSending} onclick={() => send()}>
+				<span>{isSending ? 'Pensando' : 'Enviar'}</span><b>{isSending ? '…' : '↑'}</b>
 			</button>
 		</div>
 		{#if selectedImage}<div class="attachment-preview">Imagen lista: {selectedImage.name} <button aria-label="Quitar imagen" onclick={() => (selectedImage = undefined)}>×</button></div>{/if}
@@ -132,7 +148,8 @@
 
 	.brand-lockup strong { font-size: 1rem; line-height: 1.1; }
 	.brand-lockup small { display: block; color: var(--text-muted); font-size: 0.72rem; margin-top: 3px; }
-	.online-status { color: var(--accent-blue); font-size: 0.78rem; font-weight: 600; }
+	.online-status { color: var(--accent-blue); font-size: 0.78rem; font-weight: 600; transition: color 0.2s; }
+	.online-status.thinking { color: #b26a00; }
 	.online-status i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #2f80ed; margin-right: 6px; }
 
 	#chat-window {
@@ -150,6 +167,20 @@
 		gap: 32px;
 	}
 
+	.quick-prompts { display: flex; flex-wrap: wrap; gap: 8px; margin-left: 42px; }
+	.quick-prompts button {
+		border: 1px solid #d6e0ec;
+		background: #f8fbff;
+		color: var(--accent-blue);
+		border-radius: 18px;
+		padding: 8px 12px;
+		font: inherit;
+		font-size: 0.78rem;
+		cursor: pointer;
+		transition: background 0.2s, border-color 0.2s, transform 0.2s;
+	}
+	.quick-prompts button:hover { background: #eef5fc; border-color: var(--accent-blue); transform: translateY(-1px); }
+
 	.input-area {
 		padding: 15px 24px 17px;
 		background: #ffffff;
@@ -159,6 +190,7 @@
 	.composer { width: min(780px, 100%); margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
 	.file-input { display: none; }
 	.attach-btn { width: 38px; height: 38px; border: 1px solid var(--border-color); background: #fff; color: var(--accent-blue); border-radius: 8px; cursor: pointer; font-size: 1.25rem; }
+	.attach-btn:disabled, .btn-send:disabled { opacity: 0.65; cursor: wait; }
 	.attachment-preview { width: min(780px, 100%); margin: 7px auto 0; font-size: 0.75rem; color: var(--text-muted); }
 	.attachment-preview button { border: 0; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 1rem; }
 	textarea {
@@ -211,6 +243,7 @@
 		#chat-window { padding: 22px 15px 34px; }
 		.input-area { padding: 12px 14px 14px; }
 		.composer-hint { display: none; }
+		.quick-prompts { margin-left: 0; }
 		.btn-send span { display: none; }
 	}
 </style>

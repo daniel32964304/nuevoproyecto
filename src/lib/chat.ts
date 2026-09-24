@@ -79,10 +79,128 @@ function projectDiscoveryResponse(request: string, history: string[]): string | 
 	if (!asksToBuild) return undefined;
 	const subject = request.replace(/^(quiero|necesito|me gustaria)\s+(hacer|crear|desarrollar|construir|diseñar)\s*/i, '').trim();
 	const remembered = history.slice(0, -1).reverse().find((item) => isSoftwareRelated(item));
-	const target = subject || remembered || 'el sistema que tienes en mente';
-	const audience = text.match(/(?:para|dirigida? a|la usaran)\s+(.{3,70})/i)?.[1]?.replace(/[.!?]+$/, '');
+	const rawTarget = (subject || remembered || 'el sistema que tienes en mente').replace(/\s+/g, ' ').trim();
+	const target = rawTarget.replace(/^(una|un|el|la)\s+/i, '').trim();
+	const audienceMatch = text.match(/(?:para|dirigida? a|la usaran)\s+(.{3,70})/i)?.[1]?.replace(/[.!?]+$/, '');
+	const audience = audienceMatch ? audienceMatch.replace(/\s+/g, ' ').trim() : undefined;
 	const functionGoal = text.match(/(?:que permita|que sirva para|para que|objetivo es)\s+(.{3,120})/i)?.[1]?.replace(/[.!?]+$/, '');
-	return `<strong>Esto es lo que entendí:</strong><br>Quieres construir ${escapeHtml(target)}${audience ? ` para ${escapeHtml(audience)}` : ''}${functionGoal ? `, con el objetivo de ${escapeHtml(functionGoal)}` : ''}.<br><br><strong>Lo que todavía falta confirmar:</strong><br>• Usuarios y permisos.<br>• Función principal y flujo más importante.<br>• Datos que se crearán, consultarán o modificarán.<br>• ¿Necesita cuentas, pagos, archivos o notificaciones?<br>• ¿Será web, móvil o ambas?<br>• Lenguaje o tecnología preferida.<br><br><strong>Cómo procederé:</strong><br>Con esas respuestas definiré requisitos, módulos, arquitectura, base de datos, API, seguridad, pruebas y el primer entregable. Puedes responder solo lo que sepas; no voy a inventar lo que falte.`;
+	const finalAudience = audience && !target.toLowerCase().includes(audience.toLowerCase()) ? ` para ${audience}` : '';
+	const finalGoal = functionGoal && !target.toLowerCase().includes(functionGoal.toLowerCase()) && !finalAudience.toLowerCase().includes(functionGoal.toLowerCase()) ? `, con el objetivo de ${functionGoal}` : '';
+	return `<strong>Te entiendo.</strong><br>Quieres crear ${escapeHtml(target)}${escapeHtml(finalAudience)}${escapeHtml(finalGoal)}.<br><br><strong>Lo haremos paso a paso:</strong><br>1. Qué hace la app o sistema.<br>2. Quién la va a usar.<br>3. Qué datos necesita y qué resultado debe ofrecer.<br>4. Qué tecnología o lenguaje te parece más cómodo.<br><br><strong>Para terminar bien, necesito confirmar:</strong><br>• Usuarios y permisos.<br>• La función principal del sistema.<br>• Los datos más importantes.<br>• Si la app tendrá pagos, cuentas, archivos o mensajes.<br>• Si será web, móvil o ambas.<br><br><strong>Así lo diseñamos:</strong><br>Con esas respuestas te ayudo a definir requisitos, flujo, arquitectura, seguridad y pruebas sin complicarte la idea.`;
+}
+
+type LogicalStructure = {
+	name: string;
+	goal: string;
+	users: string[];
+	modules: string[];
+	data: string[];
+	flows: string[];
+	rules: string[];
+	risks: string[];
+	nextAction: string;
+};
+
+function projectChange(text: string): { action: 'add' | 'remove' | 'change'; value: string } | undefined {
+	const normalized = normalize(text);
+	const action = hasAny(normalized, ['quita', 'quitar', 'elimina', 'eliminar', 'borra', 'borrar', 'no quiero'])
+		? 'remove'
+		: hasAny(normalized, ['agrega', 'agregar', 'anade', 'añade', 'incluye', 'incluir', 'tambien quiero'])
+			? 'add'
+			: hasAny(normalized, ['cambia', 'cambiar', 'modifica', 'modificar', 'actualiza', 'actualizar'])
+				? 'change'
+				: undefined;
+	if (!action) return undefined;
+	const value = text
+		.replace(/^(quiero|necesito|por favor)\s+/i, '')
+		.replace(/\b(que|el|la|los|las|un|una)\b/gi, ' ')
+		.replace(/\b(agrega|agregar|anade|añade|incluye|incluir|quita|quitar|elimina|eliminar|borra|borrar|cambia|cambiar|modifica|modificar|actualiza|actualizar)\b/gi, ' ')
+		.replace(/\s+/g, ' ')
+		.replace(/[.!?]+$/, '')
+		.trim();
+	return value ? { action, value } : undefined;
+}
+
+function addUnique(items: string[], value: string): string[] {
+	const normalizedValue = normalize(value);
+	return items.some((item) => normalize(item) === normalizedValue) ? items : [...items, value];
+}
+
+function removeMatching(items: string[], value: string): string[] {
+	const words = normalize(value).split(/\s+/).filter((word) => word.length > 3);
+	return items.filter((item) => !words.some((word) => normalize(item).includes(word)));
+}
+
+function logicalStructure(request: string, history: string[]): LogicalStructure {
+	const allText = [...history, request].join(' ');
+	const normalized = normalize(allText);
+	const firstProject = history.find((item) => isSoftwareProject(normalize(item)) || hasAny(normalize(item), ['quiero crear', 'quiero hacer', 'necesito crear', 'necesito hacer', 'construir un sistema', 'desarrollar una aplicacion']));
+	const name = (firstProject ?? request).replace(/^(quiero|necesito|me gustaria)\s+(hacer|crear|desarrollar|construir|diseñar)\s*/i, '').replace(/[.!?]+$/, '').trim();
+	const structure: LogicalStructure = {
+		name: name || 'sistema solicitado',
+		goal: 'Resolver el problema principal del usuario con un flujo claro y verificable.',
+		users: [],
+		modules: ['Interfaz para que la persona use el sistema', 'Reglas del negocio para tomar decisiones', 'Datos para guardar y consultar información'],
+		data: [],
+		flows: ['La persona inicia una acción', 'El sistema valida los datos', 'El sistema procesa la solicitud', 'El sistema muestra el resultado o un error claro'],
+		rules: ['Validar los datos antes de procesarlos', 'Solicitar confirmación antes de acciones importantes', 'No ocultar errores ni guardar información sensible sin protección'],
+		risks: [],
+		nextAction: 'Confirmar quién usará el sistema y cuál será la primera tarea que debe completar.'
+	};
+
+	const goal = allText.match(/(?:que permita|que sirva para|objetivo es|para que)\s+(.{3,120})/i)?.[1]?.replace(/[.!?]+$/, '');
+	if (goal) structure.goal = goal;
+	const audience = allText.match(/(?:para|dirigida? a|la usaran)\s+(.{3,70})/i)?.[1]?.replace(/[.!?]+$/, '');
+	if (audience) structure.users = [audience];
+	if (hasAny(normalized, ['login', 'usuario', 'contrasena', 'cuenta', 'autenticacion'])) {
+		structure.modules = addUnique(structure.modules, 'Cuentas, inicio de sesión y permisos');
+		structure.data = addUnique(structure.data, 'Usuarios, credenciales protegidas y permisos');
+	}
+	if (hasAny(normalized, ['pago', 'pagos', 'comprar', 'venta'])) {
+		structure.modules = addUnique(structure.modules, 'Pagos y confirmación de operaciones');
+		structure.data = addUnique(structure.data, 'Pedidos, importes y estado del pago');
+	}
+	if (hasAny(normalized, ['mensaje', 'chat', 'notificacion'])) {
+		structure.modules = addUnique(structure.modules, 'Mensajes y notificaciones');
+		structure.data = addUnique(structure.data, 'Mensajes, destinatarios y estado de lectura');
+	}
+	if (hasAny(normalized, ['producto', 'inventario', 'catalogo'])) {
+		structure.modules = addUnique(structure.modules, 'Catálogo e inventario');
+		structure.data = addUnique(structure.data, 'Productos, existencias y precios');
+	}
+	if (!structure.users.length) structure.risks.push('No se han definido usuarios ni permisos; podrían diseñarse funciones que no correspondan a nadie.');
+	if (!structure.data.length) structure.risks.push('Todavía no se han definido los datos; no conviene elegir una base de datos sin conocerlos.');
+	if (structure.modules.length > 4 && !hasAny(normalized, ['prioridad', 'primero', 'principal'])) structure.risks.push('Hay varias funciones; conviene elegir un primer flujo para evitar construir todo a la vez.');
+	if (hasAny(normalized, ['usuario', 'cuenta', 'login', 'pago', 'pagos'])) structure.risks.push('La identidad y los pagos requieren permisos, protección de datos, auditoría y manejo explícito de errores.');
+	const change = projectChange(request);
+	if (change) {
+		if (change.action === 'add') {
+			structure.modules = addUnique(structure.modules, change.value);
+			structure.data = addUnique(structure.data, `Información relacionada con ${change.value}`);
+			structure.flows = addUnique(structure.flows, `El sistema permite usar ${change.value}`);
+		}
+		if (change.action === 'remove') {
+			structure.modules = removeMatching(structure.modules, change.value);
+			structure.data = removeMatching(structure.data, change.value);
+			structure.flows = removeMatching(structure.flows, change.value);
+		}
+		if (change.action === 'change') structure.goal = `${structure.goal} Ajuste solicitado: ${change.value}.`;
+	}
+	if (structure.users.length && structure.data.length) structure.nextAction = 'Elegir el flujo principal y escribir sus criterios de aceptación: qué entra, qué sucede y qué resultado debe verse.';
+	return structure;
+}
+
+function projectStructureResponse(request: string, history: string[]): string | undefined {
+	const projectHistory = history.some((item) => isSoftwareProject(normalize(item)) || hasAny(normalize(item), ['quiero crear', 'quiero hacer', 'necesito crear', 'necesito hacer', 'construir un sistema'])) || isSoftwareProject(normalize(request));
+	if (!projectHistory) return undefined;
+	const change = projectChange(request);
+	const asksForStructure = hasAny(normalize(request), ['estructura', 'requisitos', 'modulos', 'módulos', 'flujo', 'arquitectura', 'que hemos decidido', 'qué hemos decidido', 'plan completo']);
+	if (!change && !asksForStructure) return undefined;
+	const structure = logicalStructure(request, history);
+	const list = (items: string[]) => items.map((item) => `• ${escapeHtml(item)}`).join('<br>');
+	const completeness = Math.round(([Boolean(structure.goal), structure.users.length > 0, structure.modules.length > 3, structure.data.length > 0, structure.flows.length > 0, structure.rules.length > 0].filter(Boolean).length / 6) * 100);
+	const actionText = change ? (change.action === 'add' ? `Agregué “${change.value}”` : change.action === 'remove' ? `Quité “${change.value}”` : `Actualicé la estructura con el cambio “${change.value}”`) : 'Organicé la idea completa';
+	return `<strong>${escapeHtml(actionText)}.</strong><br>La estructura se mantiene conectada con lo que ya decidimos.<br><br><strong>Diagnóstico</strong><br>Completitud estimada: ${completeness}%.<br>Prioridad: ${escapeHtml(structure.nextAction)}<br><br><strong>1. Objetivo</strong><br>${escapeHtml(structure.goal)}<br><br><strong>2. Quiénes lo usarán</strong><br>${list(structure.users.length ? structure.users : ['Aún falta definirlo'])}<br><br><strong>3. Módulos</strong><br>${list(structure.modules)}<br><br><strong>4. Datos principales</strong><br>${list(structure.data.length ? structure.data : ['Aún falta definirlos'])}<br><br><strong>5. Flujo principal</strong><br>${structure.flows.map((item, index) => `${index + 1}. ${escapeHtml(item)}`).join('<br>')}<br><br><strong>6. Reglas importantes</strong><br>${list(structure.rules)}<br><br><strong>Riesgos y decisiones pendientes</strong><br>${list(structure.risks.length ? structure.risks : ['No detecté riesgos críticos con la información actual.'])}<br><br><strong>Siguiente paso</strong><br>Dime “agrega…”, “quita…” o “cambia…” y actualizaré esta estructura. Cuando la confirmes, puedo convertirla en pantallas, base de datos, API, código y pruebas.`;
 }
 
 function detectIntent(text: string): RequestProfile['intent'] {
@@ -564,6 +682,8 @@ function missingDetailsResponse(request: string): string | undefined {
 export function buildResponse(userText: string, previousRequests: string[] = []): string {
 	const conversationalAnswer = conversationResponse(userText);
 	if (conversationalAnswer) return conversationalAnswer;
+	const structureAnswer = projectStructureResponse(userText, previousRequests);
+	if (structureAnswer) return structureAnswer;
 	const discoveryAnswer = projectDiscoveryResponse(userText, previousRequests);
 	if (discoveryAnswer) return discoveryAnswer;
 	if (!isSoftwareRelated(userText)) return softwareScopeResponse(userText);
